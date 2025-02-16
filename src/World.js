@@ -181,7 +181,14 @@ function addActionsForHtmlUI() {
 }
 
 
+function testFirefox() {
+  const firefox = navigator.userAgent.toLowerCase().indexOf("firefox");
+  if (firefox > -1) {
+    alert("Firefox is not supported. Please use Chrome.")
+  }
+}
 function main() {
+  testFirefox();
   setupWebGL();
 
   connectVariablesToGLSL();  
