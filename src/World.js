@@ -20,6 +20,7 @@ var FSHADER_SOURCE = `
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
+  uniform sampler2D u_Sampler1;
   uniform int u_whichTexture;
   void main() {
     if (u_whichTexture == -2) {
@@ -28,8 +29,10 @@ var FSHADER_SOURCE = `
       gl_FragColor = vec4(v_UV, 1.0, 1.0);    
     } else if (u_whichTexture == 0) {
       gl_FragColor = texture2D(u_Sampler0, v_UV);
+    } else if (u_whichTexture == 1) {
+      gl_FragColor = texture2D(u_Sampler1, v_UV);
     } else {
-      gl_FragColor = vec4(1, .2, .2, 1); // error put redish
+      gl_FragColor = vec4(1.0, .6, .6, 1.0); // error put redish
     }
   }`
 
@@ -47,6 +50,9 @@ let u_ProjectionMatrix;
 let u_ViewMatrix;
 let u_GlobalRotateMatrix;
 let u_Sampler0;
+let u_Sampler1;
+
+
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -61,6 +67,8 @@ function setupWebGL() {
   }
 
   gl.enable(gl.DEPTH_TEST);
+
+  g_camera = new Camera();
 }
 
 function connectVariablesToGLSL() {
@@ -129,6 +137,13 @@ function connectVariablesToGLSL() {
     return false;
   }
 
+  // get storage location of u_sampler0
+  u_Sampler1 = gl.getUniformLocation(gl.program, "u_Sampler1");
+  if (!u_Sampler1) {
+    console.log("Failed to get the storage location of u_Sampler1");
+    return false;
+  }
+
   const identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
@@ -150,33 +165,25 @@ let g_yellowAnimation = false;
 let g_magentaAnimation = false;
 let g_legAnimation=false;
 
-let g_legSwingAngle = 0;
-let g_legSwingSpeed = 1;
-let frontLegSwing = 0;
-let backLegSwing = 0;
+let controls;
+let pointerLocked = false;
 function addActionsForHtmlUI() {
-  document.getElementById("angleSlide").addEventListener("mousemove", function() { g_globalAngle = this.value; renderAllShapes(); });
-  document.getElementById("yellowSlide").addEventListener("mousemove", function() { g_yellowAngle = this.value; renderAllShapes(); });
-  document.getElementById("magentaSlide").addEventListener("mousemove", function() { g_magentaAngle = this.value; renderAllShapes(); });
-  document.getElementById("legSlide").addEventListener("mousemove", function() { frontLegSwing = this.value / 30; backLegSwing = -frontLegSwing; renderAllShapes(); });
+  document.getElementById("mouseSensitivity").addEventListener("mousemove", function() { controls.mouseSensitivity = this.value; });
+  document.getElementById("moveSensitivity").addEventListener("mousemove", function() { controls.moveSensitivity = this.value; });
+  document.getElementById("goFullScreen").onclick = function() {goFullscreen();};
+  document.getElementById("checkWaldo").onclick = function() {checkWaldo();};
 
-  document.getElementById("animationYellowOffButton").onclick = function() {g_yellowAnimation=false;};
-  document.getElementById("animationYellowOnButton").onclick = function() {g_yellowAnimation=true;};
 
-  document.getElementById("animationMagentaOffButton").onclick = function() {g_magentaAnimation=false;};
-  document.getElementById("animationMagentaOnButton").onclick = function() {g_magentaAnimation=true;};
-  document.getElementById("animationLegOnButton").onclick = function() {g_legAnimation=true;};
-  document.getElementById("animationLegOffButton").onclick = function() {g_legAnimation=false;};
+  document.addEventListener('fullscreenchange', fullscreenChange); // Modern browsers
+  document.addEventListener('mozfullscreenchange', fullscreenChange); // Firefox
+  document.addEventListener('webkitfullscreenchange', fullscreenChange); // Safari and Chrome
+  document.addEventListener('msfullscreenchange', fullscreenChange); // IE/Edge
 }
 
-let g_jump = false;
-let g_jumpStartTime = 0;
-let g_jumpDuration = 1000;
-let g_jumpHeight = 0.5;
-let g_jumpOffset = 0;
 
 function main() {
   setupWebGL();
+
   connectVariablesToGLSL();  
   // set up actions fpr html elements
   addActionsForHtmlUI();
@@ -186,19 +193,16 @@ function main() {
   // Specify the color for clearing <canvas>
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
+  controls = new RotateControls(g_camera);
+
   // canvas.onmousedown = function(ev) {g_mouseDown = true};
   // canvas.onmouseup = function(ev) {g_mouseDown = false};
-  canvas.onmousemove = function(ev) { if (ev.buttons == 1) {rotateScene(ev);}};
-  canvas.onmousedown = function(ev) {if (ev.shiftKey == true && !g_jump)
-    {
-      g_jump = true;
-      g_jumpStartTime = performance.now();
-      requestAnimationFrame(jump);
-    }};
+  // canvas.onmousemove = function(ev) { if (ev.buttons == 1) {rotateScene(ev);}};
 
 
-  document.onkeydown = keydown;
-
+  document.addEventListener('keydown', keydown);
+  document.addEventListener('keyup', keyup);
+  setupCoordinates();
   // Clear <canvas>
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -207,41 +211,24 @@ function main() {
 }
 
 function keydown(ev) {
-  if (ev.keyCode == 68) {
-    //right
-    g_camera.right();
-  }
-  if (ev.keyCode == 65) {
-    g_camera.left();
-  }
-  if (ev.keyCode == 87) {
-    //forward
-    g_camera.forward();
-  }
-  if (ev.keyCode == 83) {
-    //back
-    g_camera.back();
-  }
+  controls.keydown[ev.keyCode] = true;
+}
 
-  if (ev.keyCode == 81) {
-    g_camera.panLeft();
-  }
-
-  if (ev.keyCode == 69) {
-    g_camera.panRight();
-  }
-  renderAllShapes();
+function keyup(ev) {
+  controls.keydown[ev.keyCode] = false;
 }
 
 let g_startTime = performance.now() / 1000.0;
 let g_seconds = performance.now() / 1000.0-g_startTime;
+let g_last = performance.now();
 function tick() {
   g_seconds = performance.now() / 1000.0-g_startTime;
-  // console.log(g_seconds);
   updateAnimationAngles();
-
+  const g_now = performance.now();
+  controls.update((g_now - g_last) / 1000.0);
   renderAllShapes();
   requestAnimationFrame(tick);
+  g_last = g_now;
 }
 
 function updateAnimationAngles() {
@@ -252,26 +239,8 @@ function updateAnimationAngles() {
     g_magentaAngle = (45 * Math.sin(3*g_seconds)) / 10;
   }
 
-  if (g_legAnimation) {
-
-  // have some leg swing to simulate walking
-  g_legSwingAngle += g_legSwingSpeed;
-  if (g_legSwingAngle > 30 || g_legSwingAngle < -30) {
-      g_legSwingSpeed = -g_legSwingSpeed;
-  }
-
-  frontLegSwing = Math.sin((g_legSwingAngle * Math.PI) / 180);
-  // back legs will swing opposite to give walking effect
-  backLegSwing = -frontLegSwing;
-  }
 }
 
-let g_sceneRotation = [0.0, 0.0];
-function rotateScene(ev) {
-  [x, y] = convertCoordinatesEventToGL(ev);
-  g_sceneRotation[1] = x * 100;
-  g_sceneRotation[0] = y * 100;
-}
 function convertCoordinatesEventToGL(ev) {
 
   var x = ev.clientX; // x coordinate of a mouse pointer
@@ -291,42 +260,51 @@ function initTextures() {
     return false;
   }
   image.onload = function() {
-    sendTextureToGLSL(image);
+    sendTextureToGLSL(image, 0);
   };
-  image.src = "sky.jpg";
+  image.src = "test.png";
+
+  var skyImage = new Image();
+  skyImage.onload = function() {
+    sendTextureToGLSL(skyImage, 1);
+  }
+  skyImage.src = "sky.jpg";
   return true;
 }
 
-function sendTextureToGLSL(image) {
+let textures = {};
+
+function sendTextureToGLSL(image, textureUnit) {
   var texture = gl.createTexture();
-  if (!texture) {
-    console.log("Failed to create the texture object");
-    return false;
+  // if (textures[textureUnit] == null) {
+  //   textures[textureUnit] = gl.createTexture();
+  // }
+  // if (!textures[textureUnit]) {
+  //   console.log("Failed to create the texture object");
+  //   return false;
+  // }
+
+  function bindTexture(texture, image) {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
   }
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1); // flip the image y axis
   // enable texture unit0
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
-  gl.uniform1i(u_Sampler0, 0);
+  if (textureUnit == 1) {
+    gl.activeTexture(gl.TEXTURE1);
+    bindTexture(texture, image);
+    gl.uniform1i(u_Sampler1, 1);
+} else if (textureUnit == 2) {
+    gl.activeTexture(gl.TEXTURE2);
+  } else {
+    gl.activeTexture(gl.TEXTURE0);
+    bindTexture(texture, image);
+    gl.uniform1i(u_Sampler0, 0);
+  }
 
   console.log("finished loadTexture");
-}
-
-function drawCube(matrix, color) {
-  var body = new Cube();
-  body.color = color;
-  body.matrix = matrix;
-  body.render();
-}
-
-function drawCylinder(matrix, color) {
-  const cylinder = new Cylinder();
-  cylinder.matrix = matrix;
-  cylinder.color = color;
-  cylinder.render();
 }
 
 var g_map = [
@@ -338,7 +316,37 @@ var g_map = [
   [1, 0, 0, 0, 0, 0, 0, 1],
   [1, 0, 0, 0, 1, 0, 0, 1],
   [1, 0, 0, 0, 0, 0, 0, 1],
-]
+];
+function getRandomInt(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function setupCoordinates() {
+  let x, y, z;
+  x = getRandomInt(- ((width - 1) / 2), (width - 1) / 2);
+  y = 0;
+  z = getRandomInt(- ((width - 1) / 2), (width - 1) / 2);
+  waldoCoords = [x, y, z];
+
+
+  x = getRandomInt(- ((width - 1) / 2), (width - 1) / 2);
+  y = 0;
+  z = getRandomInt(- ((width - 1) / 2), (width - 1) / 2);
+  pierCoords = [x, y, z];
+
+  if (waldoCoords[0] == pierCoords[0] && waldoCoords[2] == pierCoords[2]) {
+    setupCoordinates();
+  }
+}
+
+
+extra_blocks = {};
+
+const waveHeight = 0.5;
+const waveFrequency = 0.2;
+const waveSpeed = 0.1;
+const width = 50;
 
 function drawMap() {
   // for (x = 0;  x < 8; x++ ) {
@@ -352,16 +360,20 @@ function drawMap() {
   //     }
   //   }
   // }
-  for (x = 0;  x < 32; x++ ) {
-    for (y = 0; y < 32; y++) {
-      if (x<1 || x == 31 || y == 0 || y == 31) {
+  const time = Date.now() * 0.001;
+  for (x = 0;  x < width; x++ ) {
+    for (y = 0; y < width; y++) {
+      if (true) {
         var body = new Cube();
+        body.loadTexture2();
         body.color = [0.8, 1.0, 1.0, 1.0];
-        body.textureNum = -2;
-        body.matrix.translate(0, -0.75, 0);
-        body.matrix.scale(.4, .4, .4);
-        body.matrix.translate(x-16, 0, y-16);
-        body.renderfaster();
+        body.textureNum = 0;
+        body.matrix.translate(0, -2, 0);
+        // body.matrix.scale(0.5, 0.5, 0.5);
+
+        const zOffset = waveHeight * Math.sin(waveFrequency * (x + y) + waveSpeed * time);
+        body.matrix.translate(x-width /2, zOffset, y-width/2);
+        body.renderfast();
       }
     }
   }
@@ -369,93 +381,14 @@ function drawMap() {
 // var g_eye = [0, 0, 3];
 // var g_at = [0,0,-100];
 // var g_up=[0,1,0];
-// i do not understand for the absolutel ife of me why moving this into camera.js does not work because vscode says it is within scope and intellisense can find all the associated methods but for gods sake it does not think it is defined and i absolutely hate this
-class Camera {
-  constructor() {
-      this.eye = new Vector3([0,0,3]);
-      this.at = new Vector3([0,0,-100]);
-      this.up = new Vector3([0,1,0]);
-      this.alpha = 90;
-  }
-
-  forward() {
-
-      const f = new Vector3([this.at.elements[0], this.at.elements[1], this.at.elements[2]]);
-      f.sub(this.eye);
-      f.div(f.magnitude());
-      this.at.add(f);
-      this.eye.add(f);
-    }
-
-  back() {
-      const f = new Vector3([this.eye.elements[0], this.eye.elements[1], this.eye.elements[2]]);
-      f.sub(this.at);
-      f.div(f.magnitude());
-      this.at.add(f);
-      this.eye.add(f);
-  }
-  left() {
-    const f = new Vector3([this.eye.elements[0], this.eye.elements[1], this.eye.elements[2]]);
-      f.sub(this.at);
-      f.div(f.magnitude());
-      const s = Vector3.cross(f, this.up);
-      s.div(s.magnitude());
-      this.at.add(s);
-      this.eye.add(s);
-  }
-  right() {
-    const f = new Vector3([this.eye.elements[0], this.eye.elements[1], this.eye.elements[2]]);
-      f.sub(this.at);
-      f.div(f.magnitude());
-      const s = Vector3.cross(f, this.up);
-      s.div(s.magnitude());
-      this.at.sub(s);
-      this.eye.sub(s);
-  }
-  panLeft() {
-    const f = new Vector3([this.at.elements[0], this.at.elements[1], this.at.elements[2]]);
-    f.sub(this.eye);
-    f.div(f.magnitude());
-    const rotMat = new Matrix4().setRotate(this.alpha, this.up.elements[0], this.up.elements[1], this.up.elements[2]);
-    const f_prime = rotMat.multiplyVector3(f);
-    
-    const eye_f = new Vector3([this.at.elements[0], this.at.elements[1], this.at.elements[2]]);
-    eye_f.add(f_prime);
-    this.at = eye_f;
-  }
-
-  panRight() {
-    const f = new Vector3([this.at.elements[0], this.at.elements[1], this.at.elements[2]]);
-    f.sub(this.eye);
-    f.div(f.magnitude());
-    const rotMat = new Matrix4().setRotate(-this.alpha, this.up.elements[0], this.up.elements[1], this.up.elements[2]);
-    const f_prime = rotMat.multiplyVector3(f);
-    
-    const eye_f = new Vector3([this.at.elements[0], this.at.elements[1], this.at.elements[2]]);
-    eye_f.add(f_prime);
-    this.at = eye_f;
-  }
-}
-// Test script (separate from your WebGL code)
-const v1 = new Vector3([1, 0, 0]);
-const v2 = new Vector3([0, 1, 0]);
-
-const v3 = v1.sub(v2);
-console.log("v1 - v2:", v3);
-
-v3.normalize();
-console.log("Normalized:", v3);
-
-const v4 = Vector3.cross(v1,v2);
-console.log("Cross product: ", v4);
-
-const v5 = v1.add(v2);
-console.log("v1 + v2: ", v5);
-
 
 // debugger;
-var g_camera = new Camera();
 
+let waldoCoords = [3, 0, 0];
+let pierCoords = [-3, 0, 0];
+let g_camera;
+
+let doHighlight = true; 
 function renderAllShapes() {
   var startTime = performance.now();
 
@@ -463,7 +396,7 @@ function renderAllShapes() {
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
   
   var projMat = new Matrix4();
-  projMat.setPerspective(30, canvas.width/canvas.height, 0.1, 100);
+  projMat.setPerspective(50, canvas.width/canvas.height, 0.1, 100);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
 
   let viewMat = new Matrix4();
@@ -481,66 +414,151 @@ function renderAllShapes() {
   // Clear <canvas>
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  //draw the floor
-  var body = new Cube();
-  body.color = [1.0, 0.0, 0.0, 1.0];
-  body.textureNum = 0;
-  body.matrix.translate(0, -0.75, 0.0);
-  body.matrix.scale(10, 0, 10);
-  body.matrix.translate(-0.5, 0, -0.5);
-  body.render();
+  // //draw the floor
+  // var body = new Cube();
+  // body.color = [1.0, 0.0, 0.0, 1.0];
+  // body.textureNum = 0;
+  // body.matrix.translate(0, -0.75, 0.0);
+  // body.matrix.scale(10, 0, 10);
+  // body.matrix.translate(-0.5, 0, -0.5);
+  // body.renderfast();
 
   // draw sky
   var sky = new Cube();
+  sky.loadSkyTexture();
   sky.color = [1.0, 0.0, 0.0, 1.0];
-  sky.textureNum = 0;
+  sky.textureNum = 1;
   sky.matrix.scale(50, 50, 50);
   sky.matrix.translate(-0.5, -0.5, -0.5);
-  sky.render();
+  sky.renderfast();
 
   drawMap();
-
   // draw body cube
-  var body = new Cube();
-  body.color = [1.0, 0.0, 0.0, 1.0];
-  body.textureNum = 0;
-  body.matrix.rotate(-5, 1, 0, 0);
-  body.matrix.translate(-0.25, -0.25, -0.25);
-  body.matrix.scale(0.5, 0.3, 0.5);
-  body.render();
-  
-  // drawTriangle3D( [-1.0,0.0,0.0, -0.5,-1.0,0.0, 0.0,0.0,0.0] );
-  // var body = new Matrix4();
-  // let bodyColor = [1.0, 0.9, 0.5, 1.0];
-  // body.translate(-0.25, -0.05, -0.1);
-  // body.rotate(g_sceneRotation[0], 1, 0, 0);
-  // body.rotate(g_sceneRotation[1], 0, 1, 0);
-  // body.translate(0, g_jumpOffset, 0);
-  // var bodyCoordinates = new Matrix4(body);
-  // body.scale(0.7, 0.3, 0.5);
-  // drawCube(body, bodyColor);
-
-  // const leg1 = new Matrix4(bodyCoordinates);
-  // leg1Color = [0.8, 0.5, 0.3, 1.0];
-  // bodyCoordinates = new Matrix4(leg1);
-  // leg1.rotate(frontLegSwing * 15, 0, 0, 1);
-  // leg1.translate(0.05, -0.2, 0.05);
-  // leg1.scale(0.1, 0.25, 0.1);
-  // drawCube(leg1, leg1Color);
+  // var body = new Cube();
+  // body.loadTexture1();
+  // body.color = [1.0, 0.0, 0.0, 1.0];
+  // body.textureNum = 0;
+  // // body.matrix.rotate(90, 1, 0, 0);
+  // body.matrix.translate(-0.25, -0.25, -0.25);
+  // body.matrix.scale(0.5, 0.3, 0.5);
+  // body.renderfast();
 
 
-  // const leg2 = new Matrix4(bodyCoordinates);
-  // leg2Color = [0.8, 0.5, 0.3, 1.0];
-  // // leg2 = bodyCoordinates;
-  // bodyCoordinates = new Matrix4(leg2);
-  // leg2.rotate(backLegSwing * 15, 0, 0, 1);
-  // leg2.translate(0.05, -0.2, 0.35);
-  // leg2.scale(0.1, 0.25, 0.1);
-  // drawCube(leg2, leg2Color);
+  for (const key in extra_blocks) {
+    const extra_block = extra_blocks[key];
+    var test_ray = new Cube();
+    test_ray.loadTexture3();
+    test_ray.color = [1.0, 0.0, 0.0, 1.0];
+    test_ray.textureNum = 0;
+    // test_ray.matrix.rotate(90, 1, 0, 0);
+    // test_ray.matrix.scale(0.5, 0.5, 0.5);
+    test_ray.matrix.translate(extra_block[0], extra_block[1], extra_block[2]);
+    test_ray.renderfast();
+    
+  }
+
+  const [x, y, z] = controls.getLookingAt();
+  const time = Date.now() * 0.001;
+  const offset = 0.005 * Math.sin(10 * time);
+  const size = 1.001 + offset;
+
+  if (doHighlight) {
+
+    var highlighted = new Cube();
+    highlighted.loadTexture1();
+    highlighted.color = [1.0, 0.0, 0.0, 1.0];
+    highlighted.textureNum = -10;
+    // highlighted.matrix.rotate(90, 1, 0, 0);
+    highlighted.matrix.translate(x - 0.5 * offset, y - 0.25 * offset, z - 0.25 * offset);
+    highlighted.matrix.scale(size, size, size);
+    highlighted.renderfast();
+  }
+
+
+  var waldo = new Cube();
+  const waldox = waldoCoords[0];
+  const waldoy = waldoCoords[1];
+  const waldoz= waldoCoords[2];
+  waldo.loadTexture4();
+  waldo.color = [1.0, 0.0, 0.0, 1.0];
+  waldo.textureNum = 0;
+  // waldo.matrix.rotate(90, 1, 0, 0);
+  waldo.matrix.translate(waldox, waldoy, waldoz);
+  waldo.renderfast();
+
+  var pier = new Cube();
+  const pierx = pierCoords[0];
+  const piery = pierCoords[1];
+  const pierz= pierCoords[2];
+  pier.loadTexture4();
+  pier.color = [0.25, 0.9, 0.25, 1.0];
+  pier.textureNum = -2;
+  // pier.matrix.rotate(90, 1, 0, 0);
+  pier.matrix.translate(pierx, piery, pierz);
+  pier.renderfast();
 
 
   var duration = performance.now() - startTime;
   sendTextToHTML("ms: " + Math.floor(duration) + " fps: " + Math.floor(10000/duration)/10, "numdot");
+}
+
+function checkWaldo() {
+  let [wx, wy, wz] = waldoCoords;
+  wy -= 1;
+
+  let [px, py, pz] = pierCoords;
+  py -= 1;
+  const pathExists = findPath([wx, wy, wz], [px, py, pz]);
+
+  if (pathExists == true) {
+    alert("Congratulations! You beat the game!");
+  } else {
+    alert("Try again");
+  }
+}
+function findPath(startCoord, endCoord) {
+  const [startX, startY, startZ] = startCoord;
+  const [endX, endY, endZ] = endCoord;
+
+  if (startY !== endY) {
+    return false;
+  }
+
+  const visited = new Set();
+  const queue = [[startX, startY, startZ]];
+
+  while (queue.length > 0) {
+    const [currentX, currentY, currentZ] = queue.shift();
+
+    const currentCoordStr = `${currentX},${currentY},${currentZ}`;
+    if (!extra_blocks.hasOwnProperty(currentCoordStr)) continue;
+
+    if (currentX === endX && currentY === endY && currentZ === endZ) {
+      return true;
+    }
+
+    visited.add(currentCoordStr);
+
+    const adjacentCoords = [
+      [currentX + 1, currentY, currentZ],
+      [currentX - 1, currentY, currentZ],
+      [currentX, currentY, currentZ + 1],
+      [currentX, currentY, currentZ - 1],
+    ];
+
+    for (const [nextX, nextY, nextZ] of adjacentCoords) {
+      const nextCoordStr = `${nextX},${nextY},${nextZ}`;
+      if (
+        nextY === startY &&
+        extra_blocks.hasOwnProperty(nextCoordStr) &&
+        !visited.has(nextCoordStr)
+      ) {
+        queue.push([nextX, nextY, nextZ]);
+      }
+    }
+  }
+
+  return false;
 }
 
 function sendTextToHTML(text, htmlID) {

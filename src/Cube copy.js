@@ -36,12 +36,6 @@ class Cube {
             0, 0, 1, 1, 0, 1, 1, 1, 1,
             0, 0, 1, 1, 1, 1, 0, 1, 1
         ]);
-        // this.loadTexture1();
-
-        this.vertexBuffer = null;
-        this.uvBuffer = null;
-    }
-    loadSkyTexture() {
         this.uvVerts32 = new Float32Array([
             0, 0, 1, 1, 1, 0, // Front face (triangle 1)
             0, 0, 0, 1, 1, 1, // Front face (triangle 2)
@@ -56,43 +50,10 @@ class Cube {
             1, 0, 0, 0, 0, 1, // Back face (triangle 1)
             1, 0, 0, 1, 1, 1, // Back face (triangle 2)
         ]);
-    }
-    loadTexture1() {
-        this.uvVerts32 = new Float32Array([
-            0.125, 0, 0, 0.125, 0, 0,
-            0.125, 0, 0.125, 0.125, 0, 0.125,
-            0, 0.5, 0, 0.375, 0.125, 0.375,
-            0, 0.5, 0.125, 0.375, 0.125, 0.5,
-            0, 0.25, 0.125, 0.375, 0, 0.375,
-            0, 0.25, 0.125, 0.25, 0.125, 0.375,
-            0.25, 0.125, 0.125, 0.25, 0.125, 0.125,
-            0.25, 0.125, 0.25, 0.25, 0.125, 0.25,
-            0, 0.125, 0.125, 0.125, 0.125, 0.25,
-            0, 0.125, 0.125, 0.25, 0, 0.25,
-            0.125, 0, 0.25, 0, 0.25, 0.125,
-            0.125, 0, 0.25, 0.125, 0.125, 0.125
-    ]);
-    }
-    
-    loadTexture2() {
-        this.loadTexture1();
-        
-                for (let i = 0; i < this.uvVerts32.length; i += 2) {
-                    this.uvVerts32[i] += 2/8;
-                }
-    }
 
-    loadTexture3() {this.loadTexture1();
-                for (let i = 0; i < this.uvVerts32.length; i += 2) {
-                    this.uvVerts32[i] += 4/8;
-                }
+        this.vertexBuffer = null;
+        this.uvBuffer = null;
     }
-
-    loadTexture4() {this.loadTexture1();
-        for (let i = 0; i < this.uvVerts32.length; i += 2) {
-            this.uvVerts32[i] += 6/8;
-        }
-}
 
     render() {
         // var xy = this.position;
@@ -108,41 +69,42 @@ class Cube {
 
         gl.uniformMatrix4fv(u_ModelMatrix, false, this.matrix.elements);
 
-        // back
-        drawTriangle3DUV( [0, 0, 0,    1, 1, 0,    1, 0 ,0], [1/8, 0, 0, 1/8, 0,0] );
-        drawTriangle3DUV( [0, 0, 0,    0, 1, 0,    1, 1 ,0], [1/8, 0, 1/8,1/8, 0, 1/8] );
+        // front
+        drawTriangle3DUV( [0, 0, 0,    1, 1, 0,    1, 0 ,0], [0,0, 1,1, 1,0] );
+        drawTriangle3DUV( [0, 0, 0,    0, 1, 0,    1, 1 ,0], [0,0, 0,1, 1,1] );
+
+        // pass color
+        gl.uniform4f(u_FragColor, rgba[0]*0.9, rgba[1]*0.9, rgba[2]*0.9, rgba[3]);
         
         //top i think
-        drawTriangle3DUV( [0, 1, 0,    0, 1, 1,    1, 1 ,1], [0,4/8, 0,3/8, 1/8,3/8] );
-        drawTriangle3DUV( [0, 1, 0,    1, 1, 1,    1, 1 ,0], [0,4/8, 1/8,3/8, 1/8,4/8] );
+        drawTriangle3DUV( [0, 1, 0,    0, 1, 1,    1, 1 ,1], [0,0, 0,1, 1,1] );
+        drawTriangle3DUV( [0, 1, 0,    1, 1, 1,    1, 1 ,0], [0,0, 1,1, 1,0] );
 
         // bottom
         gl.uniform4f(u_FragColor, rgba[0] * 0.85, rgba[1] * 0.85, rgba[2] * 0.85, rgba[3]);
-        drawTriangle3DUV( [0, 0, 0,    1, 0, 1,    0, 0, 1], [0,2/8, 1/8,3/8, 0,3/8] );
-        drawTriangle3DUV( [0, 0, 0,    1, 0, 0,    1, 0, 1], [0,2/8, 1/8,2/8, 1/8,3/8] );
+        drawTriangle3DUV( [0, 0, 0,    1, 0, 1,    0, 0, 1], [0,1, 1,0, 0,0] );
+        drawTriangle3DUV( [0, 0, 0,    1, 0, 0,    1, 0, 1], [0,1, 1,1, 1,0] );
 
         //right 
         gl.uniform4f(u_FragColor, rgba[0] * 0.8, rgba[1] * 0.8, rgba[2] * 0.8, rgba[3]);
-        drawTriangle3DUV( [1, 0, 0,    1, 1, 1,    1, 0, 1], [2/8,1/8, 1/8,2/8, 1/8,1/8] );
-        drawTriangle3DUV( [1, 0, 0,    1, 1, 0,    1, 1, 1], [2/8,1/8, 2/8,2/8, 1/8,2/8] );
+        drawTriangle3DUV( [1, 0, 0,    1, 1, 1,    1, 0, 1], [0,0, 1,1, 1,0] );
+        drawTriangle3DUV( [1, 0, 0,    1, 1, 0,    1, 1, 1], [0,0, 0,1, 1,1] );
 
         //left
         gl.uniform4f(u_FragColor, rgba[0] * 0.75, rgba[1] * 0.75, rgba[2] * 0.75, rgba[3]);
-        drawTriangle3DUV( [0, 0, 0,    0, 0, 1,    0, 1, 1], [0,1/8, 1/8,1/8, 1/8,2/8] );
-        drawTriangle3DUV( [0, 0, 0,    0, 1, 1,    0, 1, 0], [0,1/8, 1/8,2/8, 0,2/8] );
-        // // front
+        drawTriangle3DUV( [0, 0, 0,    0, 0, 1,    0, 1, 1], [1,0, 0,0, 0,1] );
+        drawTriangle3DUV( [0, 0, 0,    0, 1, 1,    0, 1, 0], [1,0, 0,1, 1,1] );
+        // // back
 
         gl.uniform4f(u_FragColor, rgba[0] * 0.7, rgba[1] * 0.7, rgba[2] * 0.7, rgba[3]);
-        drawTriangle3DUV( [0, 0, 1,    1, 0, 1,    1, 1, 1], [1/8,0, 2/8,0, 2/8,1/8] );
-        drawTriangle3DUV( [0, 0, 1,    1, 1, 1,    0, 1, 1], [1/8,0, 2/8,1/8, 1/8,1/8] );
+        drawTriangle3DUV( [0, 0, 1,    1, 0, 1,    1, 1, 1], [1,0, 0,0, 0,1] );
+        drawTriangle3DUV( [0, 0, 1,    1, 1, 1,    0, 1, 1], [1,0, 0,1, 1,1] );
 
     }
 
     renderfast() {
-        if (this.textureNum == -2) {
-            var rgba = this.color;
-            gl.uniform4f(u_FragColor, rgba[0], rgba[1], rgba[2], rgba[3]);
-        }
+        // var rgba = this.color;
+        // gl.uniform4f(u_FragColor, rgba[0], rgba[1], rgba[2], rgba[3]);
         gl.uniformMatrix4fv(u_ModelMatrix, false, this.matrix.elements);
         gl.uniform1i(u_whichTexture, this.textureNum);
 

@@ -29,9 +29,12 @@ function drawTriangle(vertices) {
 }
 
 var g_vertexBuffer = null;
+var g_uvBuffer = null;
 
-function initTriangle3d() {
-    g_vertexBuffer = gl.createBuffer();
+function initTriangle3d(vertices) {
+    if (g_vertexBuffer == null) {
+        g_vertexBuffer = gl.createBuffer();        
+    }
 
     if (!g_vertexBuffer) {
         console.log("Failed to create buffer object");
@@ -41,6 +44,21 @@ function initTriangle3d() {
     gl.bindBuffer(gl.ARRAY_BUFFER, g_vertexBuffer);
     gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(a_Position);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+}
+
+function initUV3d(uvs) {
+    if (g_uvBuffer == null) {
+        g_uvBuffer = gl.createBuffer();
+    }
+    if (!g_uvBuffer) {
+        console.log("failed to create uv buffer object");
+        return -1;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, g_uvBuffer);
+    gl.vertexAttribPointer(a_UV, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_UV);
+    gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.DYNAMIC_DRAW);
 }
 
 function drawTriangle3D(vertices) {
@@ -61,8 +79,33 @@ function drawTriangleWithColor(vertices, rgba) {
     drawTriangle(vertices);
 }
 
+function drawTriangle3DUVMultiple(vertices, uvs) {
+    const numVertices = vertices.length / 3; // Total number of vertices
+    initTriangle3d(vertices);
+    // if (g_vertexBuffer == null) {
+    // }
+
+    // if (g_uvBuffer == null) {
+    //     initUV3d(uvs);
+    // }
+    initUV3d(uvs);
+
+    // gl.bindBuffer(gl.ARRAY_BUFFER, g_vertexBuffer);
+    // gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+
+
+    // gl.bindBuffer(gl.ARRAY_BUFFER, g_uvBuffer);
+    // gl.vertexAttribPointer(a_UV, 2, gl.FLOAT, false, 0, 0);
+    // gl.enableVertexAttribArray(a_UV);
+    // gl.bufferSubData(gl.ARRAY_BUFFER, 0, uvs);
+
+    gl.drawArrays(gl.TRIANGLES, 0, numVertices); // Single drawArrays call
+
+    // g_vertexBuffer = null;
+    // g_uvBuffer = null
+}
 function drawTriangle3DUV(vertices, uv) {
-    var n = 3;
+    var n = vertices.length / 3;
     var vertexBuffer = gl.createBuffer();
 
     if (!vertexBuffer) {

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>OpenGL Camera Movement</title>
+<style>
+body { margin: 0; overflow: hidden; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="glCanvas"></canvas>
+<script type="module">
+import * as glMatrix from './gl-matrix.js'; // Import gl-matrix (see below)
+
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl2');
+
+if (!gl) {
+  console.error("WebGL 2 not supported");
+}
+
+// Initialize gl-matrix (if you're not already)
+glMatrix.glMatrix.setMatrixArrayType(Float32Array); // Important!
+
+// Shader program (simplified)
+const vsSource = `
+  attribute vec4 a_position;
+  uniform mat4 u_matrix;
+  void main() {
+    gl_Position = u_matrix * a_position;
+  }
+`;
+
+const fsSource = `
+  void main() {
+    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Red
+  }
+`;
+
+//... (shader creation and linking - see complete example below)
+
+// Scene setup (example triangle)
+const positions = new Float32Array([
+  -0.5, -0.5, 0.0,
+  0.5, -0.5, 0.0,
+  0.0, 0.5, 0.0,
+]);
+
+//... (buffer creation and attribute setup - see complete example below)
+
+// Camera setup
+let cameraPosition = glMatrix.vec3.fromValues(0, 0, 3); // Initial camera position
+let cameraRotation = glMatrix.quat.create(); // Initial camera rotation (identity)
+let pitch = 0; // Up/down rotation
+let yaw = 0;   // Left/right rotation
+
+// Projection matrix (perspective)
+const projectionMatrix = glMatrix.mat4.create();
+glMatrix.mat4.perspective(projectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
+
+// View matrix (initially identity)
+const viewMatrix = glMatrix.mat4.create();
+
+// Mouse movement variables
+let lastMouseX = 0;
+let lastMouseY = 0;
+let isDragging = false;
+
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+});
+
+canvas.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+
+    // Sensitivity (adjust as needed)
+    const sensitivity = 0.002;
+
+    yaw -= dx * sensitivity;
+    pitch -= dy * sensitivity;
+
+    // Clamp pitch to prevent flipping
+    pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+
+    // Update camera rotation quaternion
+    glMatrix.quat.identity(cameraRotation); // Reset rotation
+    glMatrix.quat.rotateY(cameraRotation, cameraRotation, yaw);
+    glMatrix.quat.rotateX(cameraRotation, cameraRotation, pitch);
+
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+});
+
+
+function render() {
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  // Update view matrix based on camera
+  glMatrix.mat4.identity(viewMatrix); // Reset view matrix
+  glMatrix.mat4.fromQuat(viewMatrix, cameraRotation); // Apply rotation
+  glMatrix.mat4.translate(viewMatrix, viewMatrix, glMatrix.vec3.negate(glMatrix.vec3.create(), cameraPosition)); // Translate after rotation!
+
+  // Combine matrices
+  const modelMatrix = glMatrix.mat4.create(); // Identity model matrix for the triangle
+  const mvpMatrix = glMatrix.mat4.create();
+  glMatrix.mat4.multiply(mvpMatrix, viewMatrix, modelMatrix);
+  glMatrix.mat4.multiply(mvpMatrix, projectionMatrix, mvpMatrix);
+
+  // Set the matrix uniform
+  gl.uniformMatrix4fv(uMatrixLocation, false, mvpMatrix);
+
+  // Draw the triangle
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  requestAnimationFrame(render);
+}
+
+
+//... (Shader creation, linking, buffer setup, attribute binding - see below)
+
+render(); // Start rendering
+
+</script>
+</body>
+</html>

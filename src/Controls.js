@@ -1,57 +1,162 @@
-import { Vector3 } from "../lib/cuon-matrix-cse160";
+class RotateControls {
+  constructor(object) {
+    this.camera = object;
 
-export default class RotateControls {
-  constructor(gl, object) {
-    this.canvas = gl.canvas;
-    this.target = object;
-
-    this.mouse = new Vector3(); // will use as a vector2
-    this.lerpRotation = new Vector3().set(object.rotation);
-    this.dragging = false;
-
+    this.mouse = new Vector3([0, 0, 0]); // will use as a vector2
     this.setHandlers();
+    this.keydown = {};
+    this.moveSensitivity = 10;
+    this.mouseSensitivity = 50;
   }
 
-  setHandlers() {
-    this.canvas.onmousedown = (e) => {
-      let x = (e.clientX / e.target.clientWidth) * 2.0 - 1.0;
-      let y = (-e.clientY / e.target.clientHeight) * 2.0 + 1.0;
+  handleMouseMove(e) {
+    const deltaX = e.movementX;
+    const deltaY = e.movementY;
 
-      this.mouse.elements.set([x, y, 0]);
-      this.dragging = true;
-    };
 
-    this.canvas.onmouseup = () => {
-      this.dragging = false;
-    };
+    if (pointerLocked) {
+      this.mouse = this.mouse.set(new Vector3([deltaX, deltaY, 0]));
+    }
+  }
 
-    this.canvas.onmousemove = (e) => {
-      let x = (e.clientX / e.target.clientWidth) * 2.0 - 1.0;
-      let y = (-e.clientY / e.target.clientHeight) * 2.0 + 1.0;
+  getLookingAt() {
 
-      if (this.dragging) {
-        let dx = x - this.mouse.elements[0];
-        let dy = y - this.mouse.elements[1];
+    const f = new Vector3();
+    f.set(this.camera.at);
+    f.sub(this.camera.eye);
+    f.normalize().mul(3);
 
-        this.lerpRotation.elements[0] -= dy * 100;
-        this.lerpRotation.elements[1] += dx * 100;
+    f.add(this.camera.at);
 
-        this.mouse.elements.set([x, y, 0]);
+    const x = Math.floor(f.elements[0]);
+    const y = Math.floor(f.elements[1]);
+    const z = Math.floor(f.elements[2]);
+    
+    return [x, y, z];
+  }
+
+  handleMouseClick(e) {
+    // console.log(this.camera.eye.elements, this.camera.at.elements);
+
+    // console.log(f.elements);
+    const [x, y, z] = this.getLookingAt();
+
+    if (x == waldoCoords[0] && y == waldoCoords[1] && z == waldoCoords[2]) {
+      return;
+    }
+
+    if (x == pierCoords[0] && y == pierCoords[1] && z == pierCoords[2]) {
+      return;
+    }
+
+    const key = [x + "," + y + "," + z];
+    if (e.button == 0) {
+      if (extra_blocks[key]) {
+        delete extra_blocks[key];
       }
-    };
+    }
+    if (e.button == 2) {
+      extra_blocks[key] = [x, y, z];
+    }
+
+    if (e.button == 1) {
+      doHighlight = !doHighlight;
+    }
+
+  }
+  setHandlers() {
+    canvas.addEventListener('click', () => {
+      if (!pointerLocked) {
+        canvas.requestPointerLock().catch(error => {
+          console.warn("Pointer lock request failed:", error); // Log the error
+          // if(error.message.includes("The user has exited the lock before this request was completed")){
+          // }
+      });
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key == "Escape" && pointerLocked) {
+        document.exitPointerLock();
+      }
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      pointerLocked = document.pointerLockElement === canvas;
+      if (pointerLocked) {
+      this.handleMouseMove(e);}});
+    canvas.addEventListener('click', (e) => {
+      pointerLocked = document.pointerLockElement === canvas;
+      if (pointerLocked) {this.handleMouseClick(e);}})
   }
 
-  update() {
-    // linearly interpolate rotation of object towards desired rotation
-    // results in smooth rotation of object via mouse
-    let x =
-      0.9 * this.target.rotation.elements[0] +
-      0.1 * this.lerpRotation.elements[0];
+  update(deltaTime) {
+    deltaTime = 0.016;
+    const mouseDelta = deltaTime * this.mouseSensitivity;
+    const moveDelta = deltaTime * this.moveSensitivity;
+    let x = this.mouse.elements[0] * mouseDelta;
+    let y = this.mouse.elements[1] * mouseDelta;
 
-    let y =
-      0.9 * this.target.rotation.elements[1] +
-      0.1 * this.lerpRotation.elements[1];
+    function repeatPan(func, x) {
+        for (let i = x; i > 0;) {
+          const degrees = i % 90;
+          func(degrees);
+          i -= 90;
+        }
+    }
+    if (x < 0) {
+      repeatPan(this.camera.panLeft.bind(this.camera), Math.abs(x));
+    }
+    if (x > 0) {
+      repeatPan(this.camera.panRight.bind(this.camera), Math.abs(x));
+    }
+    if (y > 0) {
+      repeatPan(this.camera.panDown.bind(this.camera), Math.abs(y));
+    }
+    if (y < 0) {
+      repeatPan(this.camera.panUp.bind(this.camera), Math.abs(y));
+    }
+    this.clear();
 
-    this.target.rotation.elements.set([x, y, 0]);
+    if (this.keydown[68]) {
+      //right
+    // console.log(this.camera.at.elements, this.camera.eye.elements);
+    g_camera.right(moveDelta);
+    }
+    if (this.keydown[65]) {
+      g_camera.left(moveDelta);
+    }
+    if (this.keydown[87]) {
+      //forward
+      g_camera.forward(moveDelta);
+    }
+    if (this.keydown[83]) {
+      //back
+      g_camera.back(moveDelta);
+    }
+
+    if (this.keydown[81]) {
+      g_camera.panLeft(3);
+    }
+
+    if (this.keydown[69]) {
+      g_camera.panRight(3);
+    }
+
+    if (this.keydown[90]) {
+      g_camera.panDown(3);
+    }
+
+    if (this.keydown[88]) {
+      g_camera.panUp(3);
+    }
+    renderAllShapes();
+  }
+
+
+
+  clear() {
+    this.mouse.elements[0] = 0;
+    this.mouse.elements[1] = 0;
   }
 }
